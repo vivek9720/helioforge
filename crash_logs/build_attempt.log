@@ -1,0 +1,10 @@
+Build attempt for Helioforge fuzz targets
+
+Command intended:
+SRC="$PWD" OUT="$PWD/out" CXX=clang++ CXXFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" LIB_FUZZING_ENGINE="-fsanitize=fuzzer" .clusterfuzzlite/build.sh
+
+Result:
+No fuzz target binaries were produced in out/.
+Git Bash command discovery reported: no clang++.
+PowerShell command discovery found no clang++, clang, g++, gcc, cl, or cmake on PATH.
+Docker CLI is installed, but Docker daemon is not running, so no local container toolchain was available.

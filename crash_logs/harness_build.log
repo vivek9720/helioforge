@@ -1,0 +1,55 @@
+﻿bash.exe : + export SRC=/f/Projects/Fenrir/helioforge
+At line:2 char:1
++ & 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /f/Projects/Fenrir/heli ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (+ export SRC=/f...nrir/helioforge:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
++ SRC=/f/Projects/Fenrir/helioforge
++ export OUT=/f/Projects/Fenrir/helioforge/out
++ OUT=/f/Projects/Fenrir/helioforge/out
++ export CXX=clang++
++ CXX=clang++
++ export CXXFLAGS=-O1
++ CXXFLAGS=-O1
++ export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
++ LIB_FUZZING_ENGINE=-fsanitize=fuzzer
++ mkdir -p /f/Projects/Fenrir/helioforge/out crash_logs
++ bash -x .clusterfuzzlite/build.sh
++ ROOT=/f/Projects/Fenrir/helioforge
++ BUILD_DIR=/f/Projects/Fenrir/helioforge/build-cfl
++ mkdir -p /f/Projects/Fenrir/helioforge/build-cfl /f/Projects/Fenrir/helioforge/out
++ cd /f/Projects/Fenrir/helioforge
++ COMMON_SRCS=(src/helioforge/byte_tools.cc src/helioforge/crosscheck.cc src/helioforge/rule_engine.cc 
+src/helioforge/schema.cc src/binpack/binpack.cc src/binpack/manifest.cc src/minidb/minidb.cc src/minidb/query.cc 
+src/cfgscript/cfgscript.cc src/cfgscript/evaluator.cc src/streamcodec/streamcodec.cc src/streamcodec/session.cc)
++ for target in binpack minidb cfgscript streamcodec
++ clang++ -O1 -std=c++17 -Iinclude fuzz/binpack_fuzzer.cc src/helioforge/byte_tools.cc src/helioforge/crosscheck.cc 
+src/helioforge/rule_engine.cc src/helioforge/schema.cc src/binpack/binpack.cc src/binpack/manifest.cc 
+src/minidb/minidb.cc src/minidb/query.cc src/cfgscript/cfgscript.cc src/cfgscript/evaluator.cc 
+src/streamcodec/streamcodec.cc src/streamcodec/session.cc -fsanitize=fuzzer -o 
+/f/Projects/Fenrir/helioforge/out/binpack_fuzzer
+.clusterfuzzlite/build.sh: line 24: clang++: command not found
++ for target in binpack minidb cfgscript streamcodec
++ clang++ -O1 -std=c++17 -Iinclude fuzz/minidb_fuzzer.cc src/helioforge/byte_tools.cc src/helioforge/crosscheck.cc 
+src/helioforge/rule_engine.cc src/helioforge/schema.cc src/binpack/binpack.cc src/binpack/manifest.cc 
+src/minidb/minidb.cc src/minidb/query.cc src/cfgscript/cfgscript.cc src/cfgscript/evaluator.cc 
+src/streamcodec/streamcodec.cc src/streamcodec/session.cc -fsanitize=fuzzer -o 
+/f/Projects/Fenrir/helioforge/out/minidb_fuzzer
+.clusterfuzzlite/build.sh: line 24: clang++: command not found
++ for target in binpack minidb cfgscript streamcodec
++ clang++ -O1 -std=c++17 -Iinclude fuzz/cfgscript_fuzzer.cc src/helioforge/byte_tools.cc src/helioforge/crosscheck.cc 
+src/helioforge/rule_engine.cc src/helioforge/schema.cc src/binpack/binpack.cc src/binpack/manifest.cc 
+src/minidb/minidb.cc src/minidb/query.cc src/cfgscript/cfgscript.cc src/cfgscript/evaluator.cc 
+src/streamcodec/streamcodec.cc src/streamcodec/session.cc -fsanitize=fuzzer -o 
+/f/Projects/Fenrir/helioforge/out/cfgscript_fuzzer
+.clusterfuzzlite/build.sh: line 24: clang++: command not found
++ for target in binpack minidb cfgscript streamcodec
++ clang++ -O1 -std=c++17 -Iinclude fuzz/streamcodec_fuzzer.cc src/helioforge/byte_tools.cc 
+src/helioforge/crosscheck.cc src/helioforge/rule_engine.cc src/helioforge/schema.cc src/binpack/binpack.cc 
+src/binpack/manifest.cc src/minidb/minidb.cc src/minidb/query.cc src/cfgscript/cfgscript.cc src/cfgscript/evaluator.cc 
+src/streamcodec/streamcodec.cc src/streamcodec/session.cc -fsanitize=fuzzer -o 
+/f/Projects/Fenrir/helioforge/out/streamcodec_fuzzer
+.clusterfuzzlite/build.sh: line 24: clang++: command not found
++ printf BUILD_EXIT:%sn 127
+BUILD_EXIT:127n
