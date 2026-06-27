@@ -1,0 +1,12 @@
+build/
+build-*/
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.profraw
+*.sancov
+crash-*
+oom-*
+timeout-*
