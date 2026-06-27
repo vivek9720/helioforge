@@ -1,0 +1,5 @@
+fuzz_targets:
+  - binpack_fuzzer
+  - minidb_fuzzer
+  - cfgscript_fuzzer
+  - streamcodec_fuzzer
