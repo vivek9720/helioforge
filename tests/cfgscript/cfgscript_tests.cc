@@ -17,4 +17,19 @@ int main() {
   auto eval = helioforge::cfgscript::evaluate_document(parsed.value);
   assert(eval.resolved.count("limits") == 1);
   assert(!helioforge::cfgscript::flatten_paths(eval.resolved).empty());
+
+  const char* self_ref = "a = $a;\n";
+  auto self = helioforge::cfgscript::parse(self_ref, std::strlen(self_ref));
+  assert(self.ok);
+  auto self_eval = helioforge::cfgscript::evaluate_document(self.value);
+  assert(self_eval.resolved.count("a") == 1);
+  assert(!self_eval.issues.empty());
+
+  const char* cycle_ref = "a = $b; b = $a;\n";
+  auto cycle = helioforge::cfgscript::parse(cycle_ref, std::strlen(cycle_ref));
+  assert(cycle.ok);
+  auto cycle_eval = helioforge::cfgscript::evaluate_document(cycle.value);
+  assert(cycle_eval.resolved.count("a") == 1);
+  assert(cycle_eval.resolved.count("b") == 1);
+  assert(!cycle_eval.issues.empty());
 }

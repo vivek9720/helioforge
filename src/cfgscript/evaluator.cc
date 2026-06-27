@@ -6,8 +6,15 @@
 namespace helioforge::cfgscript {
 namespace {
 
+constexpr size_t kMaxResolutionDepth = 128;
+
+struct ResolveContext {
+  size_t depth = 0;
+  std::vector<std::string> active_symbols;
+};
+
 Value clone_or_resolve(const Value& value, const Environment& env, const std::string& path,
-                       Evaluation* eval);
+                       Evaluation* eval, ResolveContext* ctx);
 
 std::string join_path(const std::string& base, const std::string& name) {
   return base.empty() ? name : base + "." + name;
@@ -38,21 +45,43 @@ std::string expr_to_string(const Expr& expr) {
 }
 
 Value resolve_expr(const Expr& expr, const Environment& env, const std::string& path,
-                   Evaluation* eval) {
+                   Evaluation* eval, ResolveContext* ctx) {
+  if (++ctx->depth > kMaxResolutionDepth) {
+    eval->issues.push_back({path, "expression resolution depth exceeded"});
+    --ctx->depth;
+    Value fallback;
+    fallback.data = expr_to_string(expr);
+    return fallback;
+  }
   if (expr.op == "symbol") {
     if (expr.atoms.empty()) {
       eval->issues.push_back({path, "empty symbol expression"});
+      --ctx->depth;
       return {};
     }
-    eval->referenced_symbols.insert(expr.atoms.front());
-    const Value* found = env.get(expr.atoms.front());
-    if (!found) {
-      eval->issues.push_back({path, "unresolved symbol " + expr.atoms.front()});
+    const std::string& symbol = expr.atoms.front();
+    eval->referenced_symbols.insert(symbol);
+    if (std::find(ctx->active_symbols.begin(), ctx->active_symbols.end(), symbol) !=
+        ctx->active_symbols.end()) {
+      eval->issues.push_back({path, "cyclic symbol reference " + symbol});
+      --ctx->depth;
       Value fallback;
       fallback.data = expr_to_string(expr);
       return fallback;
     }
-    return clone_or_resolve(*found, env, path, eval);
+    const Value* found = env.get(symbol);
+    if (!found) {
+      eval->issues.push_back({path, "unresolved symbol " + symbol});
+      --ctx->depth;
+      Value fallback;
+      fallback.data = expr_to_string(expr);
+      return fallback;
+    }
+    ctx->active_symbols.push_back(symbol);
+    Value resolved = clone_or_resolve(*found, env, path, eval, ctx);
+    ctx->active_symbols.pop_back();
+    --ctx->depth;
+    return resolved;
   }
   if (expr.op == "concat") {
     std::string merged;
@@ -63,20 +92,28 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& 
     }
     Value out;
     out.data = std::move(merged);
+    --ctx->depth;
     return out;
   }
   Value text;
   text.data = expr_to_string(expr);
+  --ctx->depth;
   return text;
 }
 
 Value clone_or_resolve(const Value& value, const Environment& env, const std::string& path,
-                       Evaluation* eval) {
-  if (const auto* expr = std::get_if<Expr>(&value.data)) return resolve_expr(*expr, env, path, eval);
+                       Evaluation* eval, ResolveContext* ctx) {
+  if (ctx->depth > kMaxResolutionDepth) {
+    eval->issues.push_back({path, "value resolution depth exceeded"});
+    return value;
+  }
+  if (const auto* expr = std::get_if<Expr>(&value.data)) return resolve_expr(*expr, env, path, eval, ctx);
   if (const auto* arr = std::get_if<Array>(&value.data)) {
     Array copy;
     for (size_t i = 0; i < arr->size(); ++i) {
-      copy.push_back(clone_or_resolve((*arr)[i], env, path + "[" + std::to_string(i) + "]", eval));
+      ++ctx->depth;
+      copy.push_back(clone_or_resolve((*arr)[i], env, path + "[" + std::to_string(i) + "]", eval, ctx));
+      --ctx->depth;
     }
     Value out;
     out.data = std::move(copy);
@@ -84,7 +121,11 @@ Value clone_or_resolve(const Value& value, const Environment& env, const std::st
   }
   if (const auto* map = std::get_if<Map>(&value.data)) {
     Map copy;
-    for (const auto& kv : *map) copy[kv.first] = clone_or_resolve(kv.second, env, join_path(path, kv.first), eval);
+    for (const auto& kv : *map) {
+      ++ctx->depth;
+      copy[kv.first] = clone_or_resolve(kv.second, env, join_path(path, kv.first), eval, ctx);
+      --ctx->depth;
+    }
     Value out;
     out.data = std::move(copy);
     return out;
@@ -113,7 +154,8 @@ Evaluation Environment::evaluate(const Document& doc) const {
   for (const auto& kv : doc.globals) layered.set(kv.first, kv.second);
   for (const auto& inc : doc.includes) eval.include_names.insert(inc.name);
   for (const auto& kv : doc.globals) {
-    eval.resolved[kv.first] = clone_or_resolve(kv.second, layered, kv.first, &eval);
+    ResolveContext ctx;
+    eval.resolved[kv.first] = clone_or_resolve(kv.second, layered, kv.first, &eval, &ctx);
   }
   return eval;
 }
