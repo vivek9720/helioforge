@@ -16,7 +16,7 @@
 
 int main(int argc, char** argv) {
   if (argc != 3) {
-    std::cerr << "usage: hf_inspect <binpack|minidb|cfgscript|streamcodec> <file>\n";
+    std::cerr << "usage: hf_inspect <summary|binpack|minidb|cfgscript|streamcodec> <file>\n";
     return 2;
   }
   std::ifstream in(argv[2], std::ios::binary);
