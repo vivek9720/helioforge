@@ -8,10 +8,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(HELIOFORGE_BUILD_FUZZERS "Build libFuzzer targets" OFF)
 
 add_library(helioforge
+  src/helioforge/byte_tools.cc
+  src/helioforge/crosscheck.cc
+  src/helioforge/schema.cc
   src/binpack/binpack.cc
+  src/binpack/manifest.cc
   src/minidb/minidb.cc
+  src/minidb/query.cc
   src/cfgscript/cfgscript.cc
+  src/cfgscript/evaluator.cc
   src/streamcodec/streamcodec.cc
+  src/streamcodec/session.cc
 )
 target_include_directories(helioforge PUBLIC include)
 if(MSVC)

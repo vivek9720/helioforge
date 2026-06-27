@@ -1,4 +1,5 @@
 #include "streamcodec/streamcodec.h"
+#include "streamcodec/session.h"
 
 #include <cassert>
 #include <vector>
@@ -15,4 +16,6 @@ int main() {
   auto messages = helioforge::streamcodec::decode_stream(s.data(), s.size(), &errors);
   assert(messages.size() == 1);
   assert(messages[0].payload.size() == 4);
+  auto report = helioforge::streamcodec::analyze_stream_chunks(s.data(), s.size(), 3);
+  assert(report.completed_messages == 1);
 }

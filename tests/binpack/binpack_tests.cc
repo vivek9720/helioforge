@@ -1,4 +1,5 @@
 #include "binpack/binpack.h"
+#include "binpack/manifest.h"
 
 #include <cassert>
 #include <cstdint>
@@ -27,4 +28,7 @@ int main() {
   assert(parsed.ok);
   assert(parsed.value.sections.size() == 1);
   assert(parsed.value.sections[0].records.size() == 1);
+  auto manifest = helioforge::binpack::build_manifest(parsed.value);
+  assert(manifest.records.size() == 1);
+  assert(helioforge::binpack::find_records_by_type(parsed.value, 7).size() == 1);
 }

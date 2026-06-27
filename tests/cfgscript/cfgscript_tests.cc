@@ -1,4 +1,5 @@
 #include "cfgscript/cfgscript.h"
+#include "cfgscript/evaluator.h"
 
 #include <cassert>
 #include <cstring>
@@ -13,4 +14,7 @@ int main() {
   assert(parsed.ok);
   assert(parsed.value.includes.size() == 1);
   assert(parsed.value.globals.count("limits") == 1);
+  auto eval = helioforge::cfgscript::evaluate_document(parsed.value);
+  assert(eval.resolved.count("limits") == 1);
+  assert(!helioforge::cfgscript::flatten_paths(eval.resolved).empty());
 }

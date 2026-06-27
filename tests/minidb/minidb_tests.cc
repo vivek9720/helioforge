@@ -1,4 +1,5 @@
 #include "minidb/minidb.h"
+#include "minidb/query.h"
 
 #include <cassert>
 #include <vector>
@@ -19,4 +20,7 @@ int main() {
   assert(decoded.ok);
   assert(decoded.value.visible_records.count(7) == 1);
   assert(decoded.value.visible_records.count(9) == 1);
+  auto stats = helioforge::minidb::analyze_store(decoded.value);
+  assert(stats.page_count == 1);
+  assert(!helioforge::minidb::export_compact_snapshot(decoded.value).empty());
 }
