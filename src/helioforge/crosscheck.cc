@@ -6,6 +6,7 @@
 #include "cfgscript/evaluator.h"
 #include "minidb/minidb.h"
 #include "minidb/query.h"
+#include "helioforge/rule_engine.h"
 #include "helioforge/schema.h"
 #include "streamcodec/session.h"
 #include "streamcodec/streamcodec.h"
@@ -90,6 +91,8 @@ CandidateSignal score_streamcodec_candidate(const uint8_t* data, size_t size) {
 CrossCheckReport summarize_bytes(const uint8_t* data, size_t size) {
   CrossCheckReport report;
   report.profile = profile_bytes(data, size, 64);
+  auto rule_hits = evaluate_default_rules(data, size);
+  report.rule_hits = rule_hits.size();
   SchemaGuess schema = looks_like_text(data, size) ? infer_text_schema(data, size)
                                                   : infer_binary_schema(data, size);
   report.inferred_fields = schema.fields.size();
@@ -147,7 +150,8 @@ std::string render_crosscheck(const CrossCheckReport& report) {
       << " windows=" << report.profile.windows.size()
       << " parser_errors=" << report.parser_error_count
       << " reconstructed=" << report.reconstructed_items
-      << " inferred_fields=" << report.inferred_fields;
+      << " inferred_fields=" << report.inferred_fields
+      << " rule_hits=" << report.rule_hits;
   for (const auto& signal : report.signals) {
     out << "\n" << signal.subsystem << " confidence=" << signal.confidence;
     for (const auto& note : signal.notes) out << " [" << note << "]";

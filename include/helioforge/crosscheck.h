@@ -22,6 +22,7 @@ struct CrossCheckReport {
   size_t parser_error_count = 0;
   size_t reconstructed_items = 0;
   size_t inferred_fields = 0;
+  size_t rule_hits = 0;
 };
 
 CrossCheckReport summarize_bytes(const uint8_t* data, size_t size);

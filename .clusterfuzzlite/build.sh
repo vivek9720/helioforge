@@ -8,6 +8,7 @@ cd "$ROOT"
 COMMON_SRCS=(
   src/helioforge/byte_tools.cc
   src/helioforge/crosscheck.cc
+  src/helioforge/rule_engine.cc
   src/helioforge/schema.cc
   src/binpack/binpack.cc
   src/binpack/manifest.cc

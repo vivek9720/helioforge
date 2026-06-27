@@ -10,6 +10,7 @@ option(HELIOFORGE_BUILD_FUZZERS "Build libFuzzer targets" OFF)
 add_library(helioforge
   src/helioforge/byte_tools.cc
   src/helioforge/crosscheck.cc
+  src/helioforge/rule_engine.cc
   src/helioforge/schema.cc
   src/binpack/binpack.cc
   src/binpack/manifest.cc
