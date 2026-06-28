@@ -32,4 +32,10 @@ int main() {
   assert(cycle_eval.resolved.count("a") == 1);
   assert(cycle_eval.resolved.count("b") == 1);
   assert(!cycle_eval.issues.empty());
+
+  const char* concat_ref = "a = $concat(a);\n";
+  auto concat = helioforge::cfgscript::parse(concat_ref, std::strlen(concat_ref));
+  assert(concat.ok);
+  auto concat_eval = helioforge::cfgscript::evaluate_document(concat.value);
+  assert(concat_eval.resolved.count("a") == 1);
 }

@@ -7,6 +7,7 @@ namespace helioforge::cfgscript {
 namespace {
 
 constexpr size_t kMaxResolutionDepth = 128;
+constexpr size_t kMaxStringifyDepth = 128;
 
 struct ResolveContext {
   size_t depth = 0;
@@ -44,11 +45,51 @@ std::string expr_to_string(const Expr& expr) {
   return out.str();
 }
 
+std::string value_to_string_limited(const Value& value, size_t depth) {
+  if (depth > kMaxStringifyDepth) return "<max-depth>";
+  if (std::holds_alternative<std::monostate>(value.data)) return "null";
+  if (const auto* n = std::get_if<int64_t>(&value.data)) return std::to_string(*n);
+  if (const auto* b = std::get_if<bool>(&value.data)) return *b ? "true" : "false";
+  if (const auto* s = std::get_if<std::string>(&value.data)) return *s;
+  if (const auto* expr = std::get_if<Expr>(&value.data)) return expr_to_string(*expr);
+  if (const auto* arr = std::get_if<Array>(&value.data)) {
+    std::string out = "[";
+    for (size_t i = 0; i < arr->size(); ++i) {
+      if (i) out += ",";
+      out += value_to_string_limited((*arr)[i], depth + 1);
+    }
+    out += "]";
+    return out;
+  }
+  const auto* map = std::get_if<Map>(&value.data);
+  std::string out = "{";
+  if (map) {
+    bool first = true;
+    for (const auto& kv : *map) {
+      if (!first) out += ",";
+      first = false;
+      out += kv.first + ":" + value_to_string_limited(kv.second, depth + 1);
+    }
+  }
+  out += "}";
+  return out;
+}
+
+class DepthScope {
+ public:
+  explicit DepthScope(ResolveContext* ctx) : ctx_(ctx) { ++ctx_->depth; }
+  ~DepthScope() { --ctx_->depth; }
+  bool exceeded() const { return ctx_->depth > kMaxResolutionDepth; }
+
+ private:
+  ResolveContext* ctx_;
+};
+
 Value resolve_expr(const Expr& expr, const Environment& env, const std::string& path,
                    Evaluation* eval, ResolveContext* ctx) {
-  if (++ctx->depth > kMaxResolutionDepth) {
+  DepthScope depth(ctx);
+  if (depth.exceeded()) {
     eval->issues.push_back({path, "expression resolution depth exceeded"});
-    --ctx->depth;
     Value fallback;
     fallback.data = expr_to_string(expr);
     return fallback;
@@ -56,7 +97,6 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& 
   if (expr.op == "symbol") {
     if (expr.atoms.empty()) {
       eval->issues.push_back({path, "empty symbol expression"});
-      --ctx->depth;
       return {};
     }
     const std::string& symbol = expr.atoms.front();
@@ -64,7 +104,6 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& 
     if (std::find(ctx->active_symbols.begin(), ctx->active_symbols.end(), symbol) !=
         ctx->active_symbols.end()) {
       eval->issues.push_back({path, "cyclic symbol reference " + symbol});
-      --ctx->depth;
       Value fallback;
       fallback.data = expr_to_string(expr);
       return fallback;
@@ -72,7 +111,6 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& 
     const Value* found = env.get(symbol);
     if (!found) {
       eval->issues.push_back({path, "unresolved symbol " + symbol});
-      --ctx->depth;
       Value fallback;
       fallback.data = expr_to_string(expr);
       return fallback;
@@ -80,24 +118,21 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& 
     ctx->active_symbols.push_back(symbol);
     Value resolved = clone_or_resolve(*found, env, path, eval, ctx);
     ctx->active_symbols.pop_back();
-    --ctx->depth;
     return resolved;
   }
   if (expr.op == "concat") {
     std::string merged;
     for (const auto& atom : expr.atoms) {
       const Value* found = env.get(atom);
-      if (found) merged += value_to_string(*found);
+      if (found) merged += value_to_string_limited(*found, 0);
       else merged += atom;
     }
     Value out;
     out.data = std::move(merged);
-    --ctx->depth;
     return out;
   }
   Value text;
   text.data = expr_to_string(expr);
-  --ctx->depth;
   return text;
 }
 
@@ -111,9 +146,12 @@ Value clone_or_resolve(const Value& value, const Environment& env, const std::st
   if (const auto* arr = std::get_if<Array>(&value.data)) {
     Array copy;
     for (size_t i = 0; i < arr->size(); ++i) {
-      ++ctx->depth;
+      DepthScope depth(ctx);
+      if (depth.exceeded()) {
+        eval->issues.push_back({path, "array resolution depth exceeded"});
+        break;
+      }
       copy.push_back(clone_or_resolve((*arr)[i], env, path + "[" + std::to_string(i) + "]", eval, ctx));
-      --ctx->depth;
     }
     Value out;
     out.data = std::move(copy);
@@ -122,9 +160,12 @@ Value clone_or_resolve(const Value& value, const Environment& env, const std::st
   if (const auto* map = std::get_if<Map>(&value.data)) {
     Map copy;
     for (const auto& kv : *map) {
-      ++ctx->depth;
+      DepthScope depth(ctx);
+      if (depth.exceeded()) {
+        eval->issues.push_back({path, "map resolution depth exceeded"});
+        break;
+      }
       copy[kv.first] = clone_or_resolve(kv.second, env, join_path(path, kv.first), eval, ctx);
-      --ctx->depth;
     }
     Value out;
     out.data = std::move(copy);
@@ -173,32 +214,7 @@ std::vector<std::string> flatten_paths(const Map& map) {
 }
 
 std::string value_to_string(const Value& value) {
-  if (std::holds_alternative<std::monostate>(value.data)) return "null";
-  if (const auto* n = std::get_if<int64_t>(&value.data)) return std::to_string(*n);
-  if (const auto* b = std::get_if<bool>(&value.data)) return *b ? "true" : "false";
-  if (const auto* s = std::get_if<std::string>(&value.data)) return *s;
-  if (const auto* expr = std::get_if<Expr>(&value.data)) return expr_to_string(*expr);
-  if (const auto* arr = std::get_if<Array>(&value.data)) {
-    std::string out = "[";
-    for (size_t i = 0; i < arr->size(); ++i) {
-      if (i) out += ",";
-      out += value_to_string((*arr)[i]);
-    }
-    out += "]";
-    return out;
-  }
-  const auto* map = std::get_if<Map>(&value.data);
-  std::string out = "{";
-  if (map) {
-    bool first = true;
-    for (const auto& kv : *map) {
-      if (!first) out += ",";
-      first = false;
-      out += kv.first + ":" + value_to_string(kv.second);
-    }
-  }
-  out += "}";
-  return out;
+  return value_to_string_limited(value, 0);
 }
 
 bool structurally_equal(const Value& a, const Value& b) {
