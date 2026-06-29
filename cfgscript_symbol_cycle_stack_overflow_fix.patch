@@ -1,0 +1,162 @@
+From 6032c354f509a7ae74385fb1642ddfe85501fdbc Mon Sep 17 00:00:00 2001
+From: Sohit <sohitmk@gmail.com>
+Date: Sat, 27 Jun 2026 21:59:47 +0530
+Subject: [PATCH] Guard cfgscript symbol resolution cycles
+
+---
+ src/cfgscript/evaluator.cc         | 64 +++++++++++++++++++++++++-----
+ tests/cfgscript/cfgscript_tests.cc | 15 +++++++
+ 2 files changed, 68 insertions(+), 11 deletions(-)
+
+diff --git a/src/cfgscript/evaluator.cc b/src/cfgscript/evaluator.cc
+index 715cb58..8bd3d07 100644
+--- a/src/cfgscript/evaluator.cc
++++ b/src/cfgscript/evaluator.cc
+@@ -6,8 +6,15 @@
+ namespace helioforge::cfgscript {
+ namespace {
+ 
++constexpr size_t kMaxResolutionDepth = 128;
++
++struct ResolveContext {
++  size_t depth = 0;
++  std::vector<std::string> active_symbols;
++};
++
+ Value clone_or_resolve(const Value& value, const Environment& env, const std::string& path,
+-                       Evaluation* eval);
++                       Evaluation* eval, ResolveContext* ctx);
+ 
+ std::string join_path(const std::string& base, const std::string& name) {
+   return base.empty() ? name : base + "." + name;
+@@ -38,21 +45,43 @@ std::string expr_to_string(const Expr& expr) {
+ }
+ 
+ Value resolve_expr(const Expr& expr, const Environment& env, const std::string& path,
+-                   Evaluation* eval) {
++                   Evaluation* eval, ResolveContext* ctx) {
++  if (++ctx->depth > kMaxResolutionDepth) {
++    eval->issues.push_back({path, "expression resolution depth exceeded"});
++    --ctx->depth;
++    Value fallback;
++    fallback.data = expr_to_string(expr);
++    return fallback;
++  }
+   if (expr.op == "symbol") {
+     if (expr.atoms.empty()) {
+       eval->issues.push_back({path, "empty symbol expression"});
++      --ctx->depth;
+       return {};
+     }
+-    eval->referenced_symbols.insert(expr.atoms.front());
+-    const Value* found = env.get(expr.atoms.front());
++    const std::string& symbol = expr.atoms.front();
++    eval->referenced_symbols.insert(symbol);
++    if (std::find(ctx->active_symbols.begin(), ctx->active_symbols.end(), symbol) !=
++        ctx->active_symbols.end()) {
++      eval->issues.push_back({path, "cyclic symbol reference " + symbol});
++      --ctx->depth;
++      Value fallback;
++      fallback.data = expr_to_string(expr);
++      return fallback;
++    }
++    const Value* found = env.get(symbol);
+     if (!found) {
+-      eval->issues.push_back({path, "unresolved symbol " + expr.atoms.front()});
++      eval->issues.push_back({path, "unresolved symbol " + symbol});
++      --ctx->depth;
+       Value fallback;
+       fallback.data = expr_to_string(expr);
+       return fallback;
+     }
+-    return clone_or_resolve(*found, env, path, eval);
++    ctx->active_symbols.push_back(symbol);
++    Value resolved = clone_or_resolve(*found, env, path, eval, ctx);
++    ctx->active_symbols.pop_back();
++    --ctx->depth;
++    return resolved;
+   }
+   if (expr.op == "concat") {
+     std::string merged;
+@@ -63,20 +92,28 @@ Value resolve_expr(const Expr& expr, const Environment& env, const std::string&
+     }
+     Value out;
+     out.data = std::move(merged);
++    --ctx->depth;
+     return out;
+   }
+   Value text;
+   text.data = expr_to_string(expr);
++  --ctx->depth;
+   return text;
+ }
+ 
+ Value clone_or_resolve(const Value& value, const Environment& env, const std::string& path,
+-                       Evaluation* eval) {
+-  if (const auto* expr = std::get_if<Expr>(&value.data)) return resolve_expr(*expr, env, path, eval);
++                       Evaluation* eval, ResolveContext* ctx) {
++  if (ctx->depth > kMaxResolutionDepth) {
++    eval->issues.push_back({path, "value resolution depth exceeded"});
++    return value;
++  }
++  if (const auto* expr = std::get_if<Expr>(&value.data)) return resolve_expr(*expr, env, path, eval, ctx);
+   if (const auto* arr = std::get_if<Array>(&value.data)) {
+     Array copy;
+     for (size_t i = 0; i < arr->size(); ++i) {
+-      copy.push_back(clone_or_resolve((*arr)[i], env, path + "[" + std::to_string(i) + "]", eval));
++      ++ctx->depth;
++      copy.push_back(clone_or_resolve((*arr)[i], env, path + "[" + std::to_string(i) + "]", eval, ctx));
++      --ctx->depth;
+     }
+     Value out;
+     out.data = std::move(copy);
+@@ -84,7 +121,11 @@ Value clone_or_resolve(const Value& value, const Environment& env, const std::st
+   }
+   if (const auto* map = std::get_if<Map>(&value.data)) {
+     Map copy;
+-    for (const auto& kv : *map) copy[kv.first] = clone_or_resolve(kv.second, env, join_path(path, kv.first), eval);
++    for (const auto& kv : *map) {
++      ++ctx->depth;
++      copy[kv.first] = clone_or_resolve(kv.second, env, join_path(path, kv.first), eval, ctx);
++      --ctx->depth;
++    }
+     Value out;
+     out.data = std::move(copy);
+     return out;
+@@ -113,7 +154,8 @@ Evaluation Environment::evaluate(const Document& doc) const {
+   for (const auto& kv : doc.globals) layered.set(kv.first, kv.second);
+   for (const auto& inc : doc.includes) eval.include_names.insert(inc.name);
+   for (const auto& kv : doc.globals) {
+-    eval.resolved[kv.first] = clone_or_resolve(kv.second, layered, kv.first, &eval);
++    ResolveContext ctx;
++    eval.resolved[kv.first] = clone_or_resolve(kv.second, layered, kv.first, &eval, &ctx);
+   }
+   return eval;
+ }
+diff --git a/tests/cfgscript/cfgscript_tests.cc b/tests/cfgscript/cfgscript_tests.cc
+index 57442c6..e227dcf 100644
+--- a/tests/cfgscript/cfgscript_tests.cc
++++ b/tests/cfgscript/cfgscript_tests.cc
+@@ -17,4 +17,19 @@ int main() {
+   auto eval = helioforge::cfgscript::evaluate_document(parsed.value);
+   assert(eval.resolved.count("limits") == 1);
+   assert(!helioforge::cfgscript::flatten_paths(eval.resolved).empty());
++
++  const char* self_ref = "a = $a;\n";
++  auto self = helioforge::cfgscript::parse(self_ref, std::strlen(self_ref));
++  assert(self.ok);
++  auto self_eval = helioforge::cfgscript::evaluate_document(self.value);
++  assert(self_eval.resolved.count("a") == 1);
++  assert(!self_eval.issues.empty());
++
++  const char* cycle_ref = "a = $b; b = $a;\n";
++  auto cycle = helioforge::cfgscript::parse(cycle_ref, std::strlen(cycle_ref));
++  assert(cycle.ok);
++  auto cycle_eval = helioforge::cfgscript::evaluate_document(cycle.value);
++  assert(cycle_eval.resolved.count("a") == 1);
++  assert(cycle_eval.resolved.count("b") == 1);
++  assert(!cycle_eval.issues.empty());
+ }
+-- 
+2.53.0.windows.1
+
